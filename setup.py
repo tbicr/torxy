@@ -8,7 +8,7 @@ setup(
     author='Pavel Tyslacki',
     author_email='pavel.tyslacki@gmail.com',
     license='MIT',
-    packages=find_packages(),
+    packages=find_packages(exclude=('tests', 'tests.*')),
     include_package_data=True,
     zip_safe=False,
     install_requires=open('requirements.txt').read().strip().splitlines(),
