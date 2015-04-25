@@ -1,15 +1,15 @@
 import logging
 import subprocess
 import time
-import shutil
 import multiprocessing
+import shutil
 
 import stem
 import stem.control
 
 import torxy.browsers
 import torxy.exceptions
-from torxy.utils import generate_password
+import torxy.utils
 
 
 logger = logging.getLogger()
@@ -22,7 +22,7 @@ class Tor(object):
         self.port = port
         self.control_port = control_port
         self.data_directory = data_directory
-        self.password = generate_password()
+        self.password = torxy.utils.generate_password()
         self._browsers = []
         self.start()
 
@@ -80,14 +80,17 @@ class Tor(object):
         self.quit_browsers()
         browser = self.get_browser(browser_name)
 
-        ip = browser.get_ip()
+        ip = new_ip = browser.get_ip()
         browser.quit()
         while attempts > 0:
             self.new_tor_identity()
             while checks > 0:
                 time.sleep(sleep)
                 browser = self.get_browser(browser_name)
-                new_ip = browser.get_ip()
+                try:
+                    new_ip = browser.get_ip()
+                except Exception:
+                    logger.warning('Can\'t get ip', exc_info=True)
                 browser.quit()
                 if ip != new_ip:
                     logger.info('Got new tor identity: %s', new_ip)
@@ -97,8 +100,8 @@ class Tor(object):
         raise torxy.exceptions.IdentityNotChanged('Can\'t get new tor identity')
 
 
-def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/tor_instance_',
-            step=2, Process=multiprocessing.Process):
+def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/tor_instance_{}',
+            step=2, wait_before_next=30, Process=multiprocessing.Process):
     processes = []
     for index, args in enumerate(data):
         def wrapper(*args, **kwargs):
@@ -110,9 +113,10 @@ def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/to
                 '127.0.0.1',
                 port + index * step,
                 control_port + index * step,
-                '{}{}'.format(data_directory, port + index * step),
+                data_directory.format(port + index * step),
             ) + args)
         p.start()
         processes.append(p)
+        time.sleep(wait_before_next)
     for p in processes:
         p.join()
