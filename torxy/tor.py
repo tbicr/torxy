@@ -17,14 +17,14 @@ logger = logging.getLogger()
 
 class Tor(object):
 
-    def __init__(self, address, port, control_port, data_directory):
+    def __init__(self, address, port, control_port, data_directory, wait_start=0, wait_check=0):
         self.address = address
         self.port = port
         self.control_port = control_port
         self.data_directory = data_directory
         self.password = torxy.utils.generate_password()
         self._browsers = []
-        self.start()
+        self.start(wait_start, wait_check)
 
     def __enter__(self):
         return self
@@ -37,7 +37,7 @@ class Tor(object):
                                     stdout=subprocess.PIPE).communicate()
         return out.decode().strip()
 
-    def start(self, sleep=1):
+    def start(self, wait_start=0, wait_check=0):
         logger.info('Starting tor instance')
         self.subprocess = subprocess.Popen([
             'tor',
@@ -47,7 +47,14 @@ class Tor(object):
              '--CookieAuthentication', '0',
              '--HashedControlPassword', '',
         ])
-        time.sleep(sleep)
+        if wait_start:
+            time.sleep(wait_start)
+        if wait_check:
+            try:
+                self.get_browser().get_ip()
+            except:
+                logger.warning('Get error when check tor connection', exc_info=True)
+            time.sleep(wait_check)
         logger.info('Started tor instance')
 
     def close(self):
@@ -101,14 +108,15 @@ class Tor(object):
 
 
 def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/tor_instance_{}',
-            step=2, wait_before_next=30, Process=multiprocessing.Process):
+            step=2, wait_start=0, wait_check=0, wait_before_next=0, Process=multiprocessing.Process):
     processes = []
     for index, args in enumerate(data):
         def wrapper(*args, **kwargs):
-            address, port, control_port, data_directory, *args = args
+            address, port, control_port, data_directory, wait_start, wait_check, *args = args
             while True:
                 try:
-                    with Tor(address, port, control_port, data_directory) as tor:
+                    with Tor(address, port, control_port, data_directory,
+                             wait_start=wait_start, wait_check=wait_check) as tor:
                         handler(tor, *args, **kwargs)
                 except torxy.exceptions.RestartTor:
                     continue
@@ -119,9 +127,12 @@ def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/to
                 port + index * step,
                 control_port + index * step,
                 data_directory.format(port + index * step),
+                wait_start,
+                wait_check,
             ) + args)
         p.start()
         processes.append(p)
-        time.sleep(wait_before_next)
+        if wait_before_next:
+            time.sleep(wait_before_next)
     for p in processes:
         p.join()
