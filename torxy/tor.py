@@ -106,8 +106,13 @@ def process(handler, data, port=9052, control_port=9053, data_directory='/tmp/to
     for index, args in enumerate(data):
         def wrapper(*args, **kwargs):
             address, port, control_port, data_directory, *args = args
-            with Tor(address, port, control_port, data_directory) as tor:
-                handler(tor, *args, **kwargs)
+            while True:
+                try:
+                    with Tor(address, port, control_port, data_directory) as tor:
+                        handler(tor, *args, **kwargs)
+                except torxy.exceptions.RestartTor:
+                    continue
+                break
 
         p = Process(target=wrapper, args=(
                 '127.0.0.1',

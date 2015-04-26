@@ -11,3 +11,8 @@ class BrowserNotFound(BaseException):
 class IdentityNotChanged(BaseException):
 
     pass
+
+
+class RestartTor(BaseException):
+
+    pass
